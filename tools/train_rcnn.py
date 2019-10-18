@@ -8,6 +8,7 @@ from tensorboardX import SummaryWriter
 import os
 import argparse
 import logging
+import tensorflow as tf
 from functools import partial
 
 from lib.net.point_rcnn import PointRCNN
@@ -33,14 +34,14 @@ parser.add_argument('--mgpus', action='store_true', default=False, help='whether
 parser.add_argument("--ckpt", type=str, default=None, help="continue training from this checkpoint")
 parser.add_argument("--rpn_ckpt", type=str, default=None, help="specify the well-trained rpn checkpoint")
 
-parser.add_argument("--gt_database", type=str, default='gt_database/train_gt_database_3level_Car.pkl',
+parser.add_argument("--gt_database", type=str, default='gt_database/train_gt_database_3level_truck.pkl',
                     help='generated gt database for augmentation')
 parser.add_argument("--rcnn_training_roi_dir", type=str, default=None,
                     help='specify the saved rois for rcnn training when using rcnn_offline mode')
 parser.add_argument("--rcnn_training_feature_dir", type=str, default=None,
                     help='specify the saved features for rcnn training when using rcnn_offline mode')
 
-parser.add_argument('--train_with_eval', action='store_true', default=False, help='whether to train with evaluation')
+parser.add_argument('--train_with_eval', action='store_true', default=True, help='whether to train with evaluation')
 parser.add_argument("--rcnn_eval_roi_dir", type=str, default=None,
                     help='specify the saved rois for rcnn evaluation when using rcnn_offline mode')
 parser.add_argument("--rcnn_eval_feature_dir", type=str, default=None,
@@ -188,7 +189,7 @@ if __name__ == "__main__":
     os.system('cp ../lib/datasets/kitti_rcnn_dataset.py %s/' % backup_dir)
 
     # tensorboard log
-    tb_log = SummaryWriter(log_dir=os.path.join(root_result_dir, 'tensorboard'))
+    tb_log = tf.summary.create_file_writer(logdir=os.path.join(root_result_dir, 'tensorboard'))
 
     # create dataloader & network & optimizer
     train_loader, test_loader = create_dataloader(logger)

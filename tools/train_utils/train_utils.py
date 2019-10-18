@@ -4,6 +4,7 @@ import torch
 import torch.nn as nn
 from torch.nn.utils import clip_grad_norm_
 import tqdm
+import tensorflow as tf
 import torch.optim.lr_scheduler as lr_sched
 import math
 
@@ -181,14 +182,16 @@ class Trainer(object):
 
                 if self.bnm_scheduler is not None:
                     self.bnm_scheduler.step(it)
-                    self.tb_log.add_scalar('bn_momentum', self.bnm_scheduler.lmbd(epoch), it)
+                    with self.tb_log.as_default():
+                        tf.summary.scalar('bn_momentum', self.bnm_scheduler.lmbd(epoch), step=it)
 
                 # train one epoch
                 for cur_it, batch in enumerate(train_loader):
                     if lr_scheduler_each_iter:
                         self.lr_scheduler.step(it)
                         cur_lr = float(self.optimizer.lr)
-                        self.tb_log.add_scalar('learning_rate', cur_lr, it)
+                        with self.tb_log.as_default():
+                            tf.summary.scalar('learning_rate', cur_lr, step=it)
                     else:
                         if self.lr_warmup_scheduler is not None and epoch < self.warmup_epoch:
                             self.lr_warmup_scheduler.step(it)
@@ -208,10 +211,11 @@ class Trainer(object):
                     tbar.refresh()
 
                     if self.tb_log is not None:
-                        self.tb_log.add_scalar('train_loss', loss, it)
-                        self.tb_log.add_scalar('learning_rate', cur_lr, it)
-                        for key, val in tb_dict.items():
-                            self.tb_log.add_scalar('train_' + key, val, it)
+                        with self.tb_log.as_default():
+                            tf.summary.scalar('train_loss', loss, step=it)
+                            tf.summary.scalar('learning_rate', cur_lr, step=it)
+                            for key, val in tb_dict.items():
+                                tf.summary.scalar('train_' + key, val, step=it)
 
                 # save trained model
                 trained_epoch = epoch + 1
@@ -229,9 +233,10 @@ class Trainer(object):
                             val_loss, eval_dict, cur_performance = self.eval_epoch(test_loader)
 
                         if self.tb_log is not None:
-                            self.tb_log.add_scalar('val_loss', val_loss, it)
-                            for key, val in eval_dict.items():
-                                self.tb_log.add_scalar('val_' + key, val, it)
+                            with self.tb_log.as_default():
+                                tf.summary.scalar('val_loss', val_loss, step=it)
+                                for key, val in tb_dict.items():
+                                    tf.summary.scalar('val_' + key, val, step=it)
 
                 pbar.close()
                 pbar = tqdm.tqdm(total=len(train_loader), leave=False, desc='train')

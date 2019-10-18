@@ -9,22 +9,45 @@ import lib.utils.roipool3d.roipool3d_utils as roipool3d_utils
 from lib.config import cfg
 
 
+M = 20000
+
+
 class KittiRCNNDataset(KittiDataset):
     def __init__(self, root_dir, npoints=16384, split='train', classes='Car', mode='TRAIN', random_select=True,
                  logger=None, rcnn_training_roi_dir=None, rcnn_training_feature_dir=None, rcnn_eval_roi_dir=None,
                  rcnn_eval_feature_dir=None, gt_database_dir=None):
         super().__init__(root_dir=root_dir, split=split)
-        if classes == 'Car':
-            self.classes = ('Background', 'Car')
-            aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene')
-        elif classes == 'People':
-            self.classes = ('Background', 'Pedestrian', 'Cyclist')
-        elif classes == 'Pedestrian':
-            self.classes = ('Background', 'Pedestrian')
-            aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene_ped')
-        elif classes == 'Cyclist':
-            self.classes = ('Background', 'Cyclist')
-            aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene_cyclist')
+        # if classes == 'Car':
+        #     self.classes = ('Background', 'Car')
+        #     aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene')
+        # elif classes == 'People':
+        #     self.classes = ('Background', 'Pedestrian', 'Cyclist')
+        # elif classes == 'Pedestrian':
+        #     self.classes = ('Background', 'Pedestrian')
+        #     aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene_ped')
+        # elif classes == 'Cyclist':
+        #     self.classes = ('Background', 'Cyclist')
+        #     aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene_cyclist')
+        # else:
+        #     assert False, "Invalid classes: %s" % classes
+
+        if classes == 'all':
+            self.classes = (
+                'background', 'animal', 'bicycle', 'bus', 'car',
+                'emergency_vehicle', 'motorcycle', 'other_vehicle', 'pedestrian', 'truck'
+            )
+            aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene_all')
+        elif classes == 'alive':
+            self.classes = (
+                'background', 'animal', 'bicycle', 'motorcycle', 'pedestrian'
+            )
+            aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene_alive')
+        elif classes == 'car':
+            self.classes = ('background', 'car')
+            aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene_car')
+        elif classes == 'huge_vehicles':
+            self.classes = ('background', 'bus', 'emergency_vehicle', 'other_vehicle', 'truck')
+            aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene_huge_vehicles')
         else:
             assert False, "Invalid classes: %s" % classes
 
@@ -82,17 +105,19 @@ class KittiRCNNDataset(KittiDataset):
             if mode == 'TRAIN':
                 self.preprocess_rpn_training_data()
             else:
-                self.sample_id_list = [int(sample_id) for sample_id in self.image_idx_list]
+                # self.sample_id_list = [int(sample_id) for sample_id in self.image_idx_list]
+                self.sample_id_list = list(range(len(self.image_idx_list)))
                 self.logger.info('Load testing samples from %s' % self.imageset_dir)
                 self.logger.info('Done: total test samples %d' % len(self.sample_id_list))
         elif cfg.RCNN.ENABLED:
             for idx in range(0, self.num_sample):
-                sample_id = int(self.image_idx_list[idx])
-                obj_list = self.filtrate_objects(self.get_label(sample_id))
+                # sample_id = self.image_idx_list[idx]
+                obj_list = self.filtrate_objects(self.get_label(idx))
                 if len(obj_list) == 0:
                     # logger.info('No gt classes: %06d' % sample_id)
                     continue
-                self.sample_id_list.append(sample_id)
+                # self.sample_id_list.append(sample_id)
+                self.sample_id_list.append(idx)
 
             print('Done: filter %s results for rcnn training: %d / %d\n' %
                   (self.mode, len(self.sample_id_list), len(self.image_idx_list)))
@@ -104,36 +129,37 @@ class KittiRCNNDataset(KittiDataset):
         """
         self.logger.info('Loading %s samples from %s ...' % (self.mode, self.label_dir))
         for idx in range(0, self.num_sample):
-            sample_id = int(self.image_idx_list[idx])
-            obj_list = self.filtrate_objects(self.get_label(sample_id))
+            # sample_id = self.image_idx_list[idx]
+            obj_list = self.filtrate_objects(self.get_label(idx))
             if len(obj_list) == 0:
                 # self.logger.info('No gt classes: %06d' % sample_id)
                 continue
-            self.sample_id_list.append(sample_id)
+            self.sample_id_list.append(idx)
 
         self.logger.info('Done: filter %s results: %d / %d\n' % (self.mode, len(self.sample_id_list),
                                                                  len(self.image_idx_list)))
 
     def get_label(self, idx):
-        if idx < 10000:
-            label_file = os.path.join(self.label_dir, '%06d.txt' % idx)
+        if idx < M:
+            # label_file = os.path.join(self.label_dir, '%06d.txt' % idx)
+            label_file = os.path.join(self.label_dir, '{}.txt'.format(self.image_idx_list[idx]))
         else:
-            label_file = os.path.join(self.aug_label_dir, '%06d.txt' % idx)
+            label_file = os.path.join(self.aug_label_dir, '{}.txt'.format(self.image_idx_list[idx]))
 
-        assert os.path.exists(label_file)
+        assert os.path.exists(label_file), label_file
         return kitti_utils.get_objects_from_label(label_file)
 
     def get_image(self, idx):
-        return super().get_image(idx % 10000)
+        return super().get_image(idx % M)
 
     def get_image_shape(self, idx):
-        return super().get_image_shape(idx % 10000)
+        return super().get_image_shape(idx % M)
 
     def get_calib(self, idx):
-        return super().get_calib(idx % 10000)
+        return super().get_calib(idx % M)
 
     def get_road_plane(self, idx):
-        return super().get_road_plane(idx % 10000)
+        return super().get_road_plane(idx % M)
 
     @staticmethod
     def get_rpn_features(rpn_feature_dir, idx):
@@ -245,7 +271,8 @@ class KittiRCNNDataset(KittiDataset):
 
     def get_rpn_sample(self, index):
         sample_id = int(self.sample_id_list[index])
-        if sample_id < 10000:
+
+        if sample_id < M:
             calib = self.get_calib(sample_id)
             # img = self.get_image(sample_id)
             img_shape = self.get_image_shape(sample_id)
@@ -255,11 +282,12 @@ class KittiRCNNDataset(KittiDataset):
             pts_rect = calib.lidar_to_rect(pts_lidar[:, 0:3])
             pts_intensity = pts_lidar[:, 3]
         else:
-            calib = self.get_calib(sample_id % 10000)
+            calib = self.get_calib(sample_id % M)
             # img = self.get_image(sample_id % 10000)
-            img_shape = self.get_image_shape(sample_id % 10000)
+            img_shape = self.get_image_shape(sample_id % M)
 
-            pts_file = os.path.join(self.aug_pts_dir, '%06d.bin' % sample_id)
+            # pts_file = os.path.join(self.aug_pts_dir, '%06d.bin' % sample_id)
+            pts_file = os.path.join(self.aug_pts_dir, '{}.bin'.format(self.image_idx_list[sample_id]))
             assert os.path.exists(pts_file), '%s' % pts_file
             aug_pts = np.fromfile(pts_file, dtype=np.float32).reshape(-1, 4)
             pts_rect, pts_intensity = aug_pts[:, 0:3], aug_pts[:, 3]
@@ -296,7 +324,10 @@ class KittiRCNNDataset(KittiDataset):
             else:
                 choice = np.arange(0, len(pts_rect), dtype=np.int32)
                 if self.npoints > len(pts_rect):
-                    extra_choice = np.random.choice(choice, self.npoints - len(pts_rect), replace=False)
+                    if len(choice) < (self.npoints - len(pts_rect)):
+                        extra_choice = np.random.choice(choice, self.npoints - len(pts_rect), replace=True)
+                    else:
+                        extra_choice = np.random.choice(choice, self.npoints - len(pts_rect), replace=False)
                     choice = np.concatenate((choice, extra_choice), axis=0)
                 np.random.shuffle(choice)
 
