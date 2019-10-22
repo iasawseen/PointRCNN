@@ -44,6 +44,10 @@ class Pointnet2MSG(nn.Module):
                 PointnetFPModule(mlp=[pre_channel + skip_channel_list[k]] + cfg.RPN.FP_MLPS[k])
             )
 
+    def to_mixed_precision(self):
+        for module in self.SA_modules:
+            module.to_mixed_precision()
+
     def _break_up_pc(self, pc):
         xyz = pc[..., 0:3].contiguous()
         features = (

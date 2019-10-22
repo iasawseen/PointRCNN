@@ -20,16 +20,6 @@ class GTDatabaseGenerator(KittiDataset):
     def __init__(self, root_dir, split='train', classes=args.class_name):
         super().__init__(root_dir, split=split)
         self.gt_database = None
-        # if classes == 'Car':
-        #     self.classes = ('Background', 'Car')
-        # elif classes == 'People':
-        #     self.classes = ('Background', 'Pedestrian', 'Cyclist')
-        # elif classes == 'Pedestrian':
-        #     self.classes = ('Background', 'Pedestrian')
-        # elif classes == 'Cyclist':
-        #     self.classes = ('Background', 'Cyclist')
-        # else:
-        #     assert False, "Invalid classes: %s" % classes
 
         if classes == 'all':
             self.classes = (
@@ -106,7 +96,11 @@ class GTDatabaseGenerator(KittiDataset):
                 gt_database.append(sample_dict)
 
         # save_file_name = os.path.join(args.save_dir, '%s_gt_database_3level_%s.pkl' % (args.split, self.classes[-1]))
-        save_file_name = os.path.join(args.save_dir, '{}_gt_database_3level_{}.pkl'.format(args.split, self.classes[-1]))
+        save_file_name = os.path.join(
+            args.save_dir,
+            '{}_gt_database_3level_{}.pkl'.format(args.split, '_'.join(self.classes))
+        )
+
         with open(save_file_name, 'wb') as f:
             pickle.dump(gt_database, f)
 

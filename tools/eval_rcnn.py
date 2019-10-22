@@ -21,7 +21,7 @@ import glob
 import time
 from tensorboardX import SummaryWriter
 import tqdm
-
+from numba import cuda
 
 np.random.seed(1024)  # set the same seed
 
@@ -192,6 +192,7 @@ def eval_one_epoch_rpn(model, dataloader, epoch_id, result_dir, logger):
 
                     for idx, thresh in enumerate(thresh_list):
                         total_recalled_bbox_list[idx] += (gt_max_iou > thresh).sum().item()
+
                     recalled_num = (gt_max_iou > 0.7).sum().item()
                     total_gt_bbox += cur_gt_boxes3d.__len__()
 
@@ -245,8 +246,10 @@ def eval_one_epoch_rpn(model, dataloader, epoch_id, result_dir, logger):
 
     for idx, thresh in enumerate(thresh_list):
         cur_recall = total_recalled_bbox_list[idx] / max(total_gt_bbox, 1.0)
-        logger.info('total bbox recall(thresh=%.3f): %d / %d = %f' % (thresh, total_recalled_bbox_list[idx],
-                    total_gt_bbox, cur_recall))
+        msg = 'total bbox recall(thresh=%.3f): %d / %d = %f' % (
+            thresh, total_recalled_bbox_list[idx], total_gt_bbox, cur_recall)
+        logger.info(msg)
+        print(msg)
         ret_dict['rpn_recall(thresh=%.2f)' % thresh] = cur_recall
     logger.info('result is saved to: %s' % result_dir)
 
@@ -555,6 +558,7 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
                     for idx, thresh in enumerate(thresh_list):
                         total_recalled_bbox_list[idx] += (gt_max_iou > thresh).sum().item()
                     recalled_num += (gt_max_iou > 0.7).sum().item()
+                    # recalled_num += (gt_max_iou > 0.5).sum().item()
                     gt_num += cur_gt_boxes3d.shape[0]
                     total_gt_bbox += cur_gt_boxes3d.shape[0]
 

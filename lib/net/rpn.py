@@ -58,6 +58,9 @@ class RPN(nn.Module):
         self.proposal_layer = ProposalLayer(mode=mode)
         self.init_weights()
 
+    def to_mixed_precision(self):
+        self.backbone_net.to_mixed_precision()
+
     def init_weights(self):
         if cfg.RPN.LOSS_CLS in ['SigmoidFocalLoss']:
             pi = 0.01

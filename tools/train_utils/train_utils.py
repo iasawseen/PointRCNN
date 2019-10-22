@@ -113,9 +113,11 @@ def load_part_ckpt(model, filename, logger=cur_logger, total_keys=-1):
 
 
 class Trainer(object):
-    def __init__(self, model, model_fn, optimizer, ckpt_dir, lr_scheduler, bnm_scheduler,
+    def __init__(self, cfg, model, model_fn, optimizer, ckpt_dir, lr_scheduler, bnm_scheduler,
                  model_fn_eval, tb_log, eval_frequency=1, lr_warmup_scheduler=None, warmup_epoch=-1,
                  grad_norm_clip=1.0):
+
+        self.cfg = cfg
         self.model, self.model_fn, self.optimizer, self.lr_scheduler, self.bnm_scheduler, self.model_fn_eval = \
             model, model_fn, optimizer, lr_scheduler, bnm_scheduler, model_fn_eval
 
@@ -132,7 +134,10 @@ class Trainer(object):
         self.optimizer.zero_grad()
         loss, tb_dict, disp_dict = self.model_fn(self.model, batch)
 
-        loss.backward()
+        if self.cfg.MIXED_PRECISION:
+            self.optimizer.backward(loss)
+        else:
+            loss.backward()
         clip_grad_norm_(self.model.parameters(), self.grad_norm_clip)
         self.optimizer.step()
 
@@ -192,6 +197,7 @@ class Trainer(object):
                         cur_lr = float(self.optimizer.lr)
                         with self.tb_log.as_default():
                             tf.summary.scalar('learning_rate', cur_lr, step=it)
+
                     else:
                         if self.lr_warmup_scheduler is not None and epoch < self.warmup_epoch:
                             self.lr_warmup_scheduler.step(it)
@@ -215,7 +221,8 @@ class Trainer(object):
                             tf.summary.scalar('train_loss', loss, step=it)
                             tf.summary.scalar('learning_rate', cur_lr, step=it)
                             for key, val in tb_dict.items():
-                                tf.summary.scalar('train_' + key, val, step=it)
+                                tf.summary.scalar('train_' + key,
+                                                  val.item() if isinstance(val, torch.Tensor) else val, step=it)
 
                 # save trained model
                 trained_epoch = epoch + 1
@@ -234,9 +241,9 @@ class Trainer(object):
 
                         if self.tb_log is not None:
                             with self.tb_log.as_default():
-                                tf.summary.scalar('val_loss', val_loss, step=it)
+                                tf.summary.scalar('val_loss', val_loss, step=epoch)
                                 for key, val in tb_dict.items():
-                                    tf.summary.scalar('val_' + key, val, step=it)
+                                    tf.summary.scalar('val_' + key, val, step=epoch)
 
                 pbar.close()
                 pbar = tqdm.tqdm(total=len(train_loader), leave=False, desc='train')

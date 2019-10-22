@@ -83,7 +83,7 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
     opt = FakeOptim()  # 3e-3, wd=0.4, div_factor=10
-    schd = OneCycle(opt, 100, 3e-3, (0.95, 0.85), 10.0, 0.1)
+    schd = OneCycle(opt, 100, 3e-3, (0.95, 0.85), 10.0, 0.3)
 
     lrs = []
     moms = []

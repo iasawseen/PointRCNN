@@ -18,6 +18,7 @@ from lib.config import cfg, cfg_from_file, save_config_to_file
 import tools.train_utils.train_utils as train_utils
 from tools.train_utils.fastai_optim import OptimWrapper
 from tools.train_utils import learning_schedules_fastai as lsf
+from apex.fp16_utils import FP16_Optimizer
 
 
 parser = argparse.ArgumentParser(description="arg parser")
@@ -27,7 +28,7 @@ parser.add_argument("--batch_size", type=int, default=16, required=True, help="b
 parser.add_argument("--epochs", type=int, default=200, required=True, help="Number of epochs to train for")
 
 parser.add_argument('--workers', type=int, default=8, help='number of workers for dataloader')
-parser.add_argument("--ckpt_save_interval", type=int, default=5, help="number of training epochs")
+parser.add_argument("--ckpt_save_interval", type=int, default=1, help="number of training epochs")
 parser.add_argument('--output_dir', type=str, default=None, help='specify an output directory if needed')
 parser.add_argument('--mgpus', action='store_true', default=False, help='whether to use multiple gpu')
 
@@ -79,7 +80,7 @@ def create_dataloader(logger):
                                     classes=cfg.CLASSES,
                                     rcnn_eval_roi_dir=args.rcnn_eval_roi_dir,
                                     rcnn_eval_feature_dir=args.rcnn_eval_feature_dir)
-        test_loader = DataLoader(test_set, batch_size=1, shuffle=True, pin_memory=True,
+        test_loader = DataLoader(test_set, batch_size=4, shuffle=True, pin_memory=True,
                                  num_workers=args.workers, collate_fn=test_set.collate_batch)
     else:
         test_loader = None
@@ -144,9 +145,17 @@ def create_scheduler(optimizer, total_steps, last_epoch):
     return lr_scheduler, bnm_scheduler
 
 
+def to_mixed_precision(model):
+    for module in model.modules():
+        if not isinstance(module, nn.modules.batchnorm._BatchNorm):
+            module.half()
+    return model
+
+
 if __name__ == "__main__":
     if args.cfg_file is not None:
         cfg_from_file(args.cfg_file)
+
     cfg.TAG = os.path.splitext(os.path.basename(args.cfg_file))[0]
 
     if args.train_mode == 'rpn':
@@ -166,6 +175,7 @@ if __name__ == "__main__":
 
     if args.output_dir is not None:
         root_result_dir = args.output_dir
+
     os.makedirs(root_result_dir, exist_ok=True)
 
     log_file = os.path.join(root_result_dir, 'log_train.txt')
@@ -198,7 +208,17 @@ if __name__ == "__main__":
 
     if args.mgpus:
         model = nn.DataParallel(model)
+
     model.cuda()
+
+    if cfg.MIXED_PRECISION:
+        optimizer = FP16_Optimizer(
+            optimizer,
+            static_loss_scale=32,
+            dynamic_loss_scale=False,
+            verbose=False
+        )
+        model.to_mixed_precision()
 
     # load checkpoint if it is possible
     start_epoch = it = 0
@@ -217,8 +237,10 @@ if __name__ == "__main__":
         train_utils.load_part_ckpt(pure_model, filename=args.rpn_ckpt, logger=logger, total_keys=total_keys)
 
     if cfg.TRAIN.LR_WARMUP and cfg.TRAIN.OPTIMIZER != 'adam_onecycle':
-        lr_warmup_scheduler = train_utils.CosineWarmupLR(optimizer, T_max=cfg.TRAIN.WARMUP_EPOCH * len(train_loader),
-                                                      eta_min=cfg.TRAIN.WARMUP_MIN)
+        lr_warmup_scheduler = train_utils.CosineWarmupLR(
+            optimizer, T_max=cfg.TRAIN.WARMUP_EPOCH * len(train_loader),
+            eta_min=cfg.TRAIN.WARMUP_MIN
+        )
     else:
         lr_warmup_scheduler = None
 
@@ -226,16 +248,18 @@ if __name__ == "__main__":
     logger.info('**********************Start training**********************')
     ckpt_dir = os.path.join(root_result_dir, 'ckpt')
     os.makedirs(ckpt_dir, exist_ok=True)
+
     trainer = train_utils.Trainer(
+        cfg,
         model,
         train_functions.model_joint_fn_decorator(),
-        optimizer,
+        optimizer=optimizer,
         ckpt_dir=ckpt_dir,
         lr_scheduler=lr_scheduler,
         bnm_scheduler=bnm_scheduler,
         model_fn_eval=train_functions.model_joint_fn_decorator(),
         tb_log=tb_log,
-        eval_frequency=1,
+        eval_frequency=5,
         lr_warmup_scheduler=lr_warmup_scheduler,
         warmup_epoch=cfg.TRAIN.WARMUP_EPOCH,
         grad_norm_clip=cfg.TRAIN.GRAD_NORM_CLIP

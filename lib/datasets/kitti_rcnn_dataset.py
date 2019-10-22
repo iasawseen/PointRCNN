@@ -17,20 +17,6 @@ class KittiRCNNDataset(KittiDataset):
                  logger=None, rcnn_training_roi_dir=None, rcnn_training_feature_dir=None, rcnn_eval_roi_dir=None,
                  rcnn_eval_feature_dir=None, gt_database_dir=None):
         super().__init__(root_dir=root_dir, split=split)
-        # if classes == 'Car':
-        #     self.classes = ('Background', 'Car')
-        #     aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene')
-        # elif classes == 'People':
-        #     self.classes = ('Background', 'Pedestrian', 'Cyclist')
-        # elif classes == 'Pedestrian':
-        #     self.classes = ('Background', 'Pedestrian')
-        #     aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene_ped')
-        # elif classes == 'Cyclist':
-        #     self.classes = ('Background', 'Cyclist')
-        #     aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene_cyclist')
-        # else:
-        #     assert False, "Invalid classes: %s" % classes
-
         if classes == 'all':
             self.classes = (
                 'background', 'animal', 'bicycle', 'bus', 'car',
@@ -161,17 +147,22 @@ class KittiRCNNDataset(KittiDataset):
     def get_road_plane(self, idx):
         return super().get_road_plane(idx % M)
 
-    @staticmethod
-    def get_rpn_features(rpn_feature_dir, idx):
-        rpn_feature_file = os.path.join(rpn_feature_dir, '%06d.npy' % idx)
-        rpn_xyz_file = os.path.join(rpn_feature_dir, '%06d_xyz.npy' % idx)
-        rpn_intensity_file = os.path.join(rpn_feature_dir, '%06d_intensity.npy' % idx)
+    def get_rpn_features(self, rpn_feature_dir, idx):
+        # rpn_feature_file = os.path.join(rpn_feature_dir, '%06d.npy' % idx)
+        rpn_feature_file = os.path.join(rpn_feature_dir, '{}.npy'.format(self.image_idx_list[idx]))
+        # rpn_xyz_file = os.path.join(rpn_feature_dir, '%06d_xyz.npy' % idx)
+        rpn_xyz_file = os.path.join(rpn_feature_dir, '{}_xyz.npy'.format(self.image_idx_list[idx]))
+        # rpn_intensity_file = os.path.join(rpn_feature_dir, '%06d_intensity.npy' % idx)
+        rpn_intensity_file = os.path.join(rpn_feature_dir, '{}_intensity.npy'.format(self.image_idx_list[idx]))
+
         if cfg.RCNN.USE_SEG_SCORE:
-            rpn_seg_file = os.path.join(rpn_feature_dir, '%06d_rawscore.npy' % idx)
+            # rpn_seg_file = os.path.join(rpn_feature_dir, '%06d_rawscore.npy' % idx)
+            rpn_seg_file = os.path.join(rpn_feature_dir, '{}_rawscore.npy'.format(self.image_idx_list[idx]))
             rpn_seg_score = np.load(rpn_seg_file).reshape(-1)
             rpn_seg_score = torch.sigmoid(torch.from_numpy(rpn_seg_score)).numpy()
         else:
-            rpn_seg_file = os.path.join(rpn_feature_dir, '%06d_seg.npy' % idx)
+            # rpn_seg_file = os.path.join(rpn_feature_dir, '%06d_seg.npy' % idx)
+            rpn_seg_file = os.path.join(rpn_feature_dir, '{}_seg.npy'.format(self.image_idx_list[idx]))
             rpn_seg_score = np.load(rpn_seg_file).reshape(-1)
         return np.load(rpn_xyz_file), np.load(rpn_feature_file), np.load(rpn_intensity_file).reshape(-1), rpn_seg_score
 
@@ -292,11 +283,11 @@ class KittiRCNNDataset(KittiDataset):
             aug_pts = np.fromfile(pts_file, dtype=np.float32).reshape(-1, 4)
             pts_rect, pts_intensity = aug_pts[:, 0:3], aug_pts[:, 3]
 
-        pts_img, pts_rect_depth = calib.rect_to_img(pts_rect)
-        pts_valid_flag = self.get_valid_flag(pts_rect, pts_img, pts_rect_depth, img_shape)
-
-        pts_rect = pts_rect[pts_valid_flag][:, 0:3]
-        pts_intensity = pts_intensity[pts_valid_flag]
+        # pts_img, pts_rect_depth = calib.rect_to_img(pts_rect)
+        # pts_valid_flag = self.get_valid_flag(pts_rect, pts_img, pts_rect_depth, img_shape)
+        #
+        # pts_rect = pts_rect[pts_valid_flag][:, 0:3]
+        # pts_intensity = pts_intensity[pts_valid_flag]
 
         if cfg.GT_AUG_ENABLED and self.mode == 'TRAIN':
             # all labels for checking overlapping
@@ -312,14 +303,24 @@ class KittiRCNNDataset(KittiDataset):
         # generate inputs
         if self.mode == 'TRAIN' or self.random_select:
             if self.npoints < len(pts_rect):
-                pts_depth = pts_rect[:, 2]
-                pts_near_flag = pts_depth < 40.0
-                far_idxs_choice = np.where(pts_near_flag == 0)[0]
-                near_idxs = np.where(pts_near_flag == 1)[0]
-                near_idxs_choice = np.random.choice(near_idxs, self.npoints - len(far_idxs_choice), replace=False)
+                # pts_depth = pts_rect[:, 2]
+                # pts_near_flag = pts_depth < 40.0
+                # far_idxs_choice = np.where(pts_near_flag == 0)[0]
+                # near_idxs = np.where(pts_near_flag == 1)[0]
+                #
+                # print('far_idxs_choice:', far_idxs_choice.shape)
+                # print('near_idxs:', near_idxs.shape)
+                # print('self.npoints - len(far_idxs_choice):', self.npoints - len(far_idxs_choice))
 
-                choice = np.concatenate((near_idxs_choice, far_idxs_choice), axis=0) \
-                    if len(far_idxs_choice) > 0 else near_idxs_choice
+                # near_idxs_choice = np.random.choice(near_idxs, self.npoints - len(far_idxs_choice), replace=False)
+                #
+                # choice = np.concatenate((near_idxs_choice, far_idxs_choice), axis=0) \
+                #     if len(far_idxs_choice) > 0 else near_idxs_choice
+
+                choice = np.random.choice(np.arange(0, len(pts_rect), dtype=np.int32), self.npoints, replace=False)
+
+                # print('choice:', choice.shape)
+
                 np.random.shuffle(choice)
             else:
                 choice = np.arange(0, len(pts_rect), dtype=np.int32)
@@ -353,8 +354,10 @@ class KittiRCNNDataset(KittiDataset):
             return sample_info
 
         gt_obj_list = self.filtrate_objects(self.get_label(sample_id))
+
         if cfg.GT_AUG_ENABLED and self.mode == 'TRAIN' and gt_aug_flag:
             gt_obj_list.extend(extra_gt_obj_list)
+
         gt_boxes3d = kitti_utils.objs_to_boxes3d(gt_obj_list)
 
         gt_alpha = np.zeros((gt_obj_list.__len__()), dtype=np.float32)
@@ -364,6 +367,7 @@ class KittiRCNNDataset(KittiDataset):
         # data augmentation
         aug_pts_rect = ret_pts_rect.copy()
         aug_gt_boxes3d = gt_boxes3d.copy()
+
         if cfg.AUG_DATA and self.mode == 'TRAIN':
             aug_pts_rect, aug_gt_boxes3d, aug_method = self.data_augmentation(aug_pts_rect, aug_gt_boxes3d, gt_alpha,
                                                                               sample_id)
@@ -399,6 +403,7 @@ class KittiRCNNDataset(KittiDataset):
         gt_corners = kitti_utils.boxes3d_to_corners3d(gt_boxes3d, rotate=True)
         extend_gt_boxes3d = kitti_utils.enlarge_box3d(gt_boxes3d, extra_width=0.2)
         extend_gt_corners = kitti_utils.boxes3d_to_corners3d(extend_gt_boxes3d, rotate=True)
+
         for k in range(gt_boxes3d.shape[0]):
             box_corners = gt_corners[k]
             fg_pt_flag = kitti_utils.in_hull(pts_rect, box_corners)
@@ -554,6 +559,7 @@ class KittiRCNNDataset(KittiDataset):
             aug_enable[0] = -1
             aug_enable[1] = -1
         aug_method = []
+
         if 'rotation' in aug_list and aug_enable[0] < cfg.AUG_METHOD_PROB[0]:
             angle = np.random.uniform(-np.pi / cfg.AUG_ROT_RANGE, np.pi / cfg.AUG_ROT_RANGE)
             aug_pts_rect = kitti_utils.rotate_pc_along_y(aug_pts_rect, rot_angle=angle)
@@ -1109,11 +1115,13 @@ class KittiRCNNDataset(KittiDataset):
 
     def get_rcnn_sample_jit(self, index):
         sample_id = int(self.sample_id_list[index])
+
         rpn_xyz, rpn_features, rpn_intensity, seg_mask = \
             self.get_rpn_features(self.rcnn_training_feature_dir, sample_id)
 
         # load rois and gt_boxes3d for this sample
-        roi_file = os.path.join(self.rcnn_training_roi_dir, '%06d.txt' % sample_id)
+        # roi_file = os.path.join(self.rcnn_training_roi_dir, '%06d.txt' % sample_id)
+        roi_file = os.path.join(self.rcnn_training_roi_dir, '{}.txt'.format(self.image_idx_list[sample_id]))
         roi_obj_list = kitti_utils.get_objects_from_label(roi_file)
         roi_boxes3d = kitti_utils.objs_to_boxes3d(roi_obj_list)
         # roi_scores = kitti_utils.objs_to_scores(roi_obj_list)

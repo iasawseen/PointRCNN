@@ -8,6 +8,7 @@ cfg = __C
 # 0. basic config
 __C.TAG = 'default'
 __C.CLASSES = 'Car'
+__C.MIXED_PRECISION = False
 
 __C.INCLUDE_SIMILAR_TYPE = False
 

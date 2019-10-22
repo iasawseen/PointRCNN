@@ -23,6 +23,9 @@ class PointRCNN(nn.Module):
             else:
                 raise NotImplementedError
 
+    def to_mixed_precision(self):
+        self.rpn.to_mixed_precision()
+
     def forward(self, input_data):
         if cfg.RPN.ENABLED:
             output = {}
