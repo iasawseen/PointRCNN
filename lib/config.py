@@ -49,6 +49,8 @@ __C.RPN.NUM_HEAD_BIN = 12
 __C.RPN.BACKBONE = 'pointnet2_msg'
 
 __C.RPN.USE_BN = True
+__C.RPN.USE_IN = False
+__C.RPN.USE_GN = False
 __C.RPN.NUM_POINTS = 16384
 
 __C.RPN.SA_CONFIG = edict()
@@ -105,6 +107,8 @@ __C.RCNN.SIZE_RES_ON_ROI = False
 
 # config of network structure
 __C.RCNN.USE_BN = False
+__C.RCNN.USE_IN = False
+__C.RCNN.USE_GN = False
 __C.RCNN.DP_RATIO = 0.0
 
 __C.RCNN.BACKBONE = 'pointnet'  # pointnet, pointsift
@@ -171,6 +175,8 @@ __C.TRAIN.RPN_PRE_NMS_TOP_N = 12000
 __C.TRAIN.RPN_POST_NMS_TOP_N = 2048
 __C.TRAIN.RPN_NMS_THRESH = 0.85
 __C.TRAIN.RPN_DISTANCE_BASED_PROPOSE = True
+
+__C.TRAIN.EVAL = True
 
 
 __C.TEST = edict()

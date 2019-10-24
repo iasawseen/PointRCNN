@@ -20,10 +20,14 @@ class RCNNNet(nn.Module):
 
         if cfg.RCNN.USE_RPN_FEATURES:
             self.rcnn_input_channel = 3 + int(cfg.RCNN.USE_INTENSITY) + int(cfg.RCNN.USE_MASK) + int(cfg.RCNN.USE_DEPTH)
-            self.xyz_up_layer = pt_utils.SharedMLP([self.rcnn_input_channel] + cfg.RCNN.XYZ_UP_LAYER,
-                                                   bn=cfg.RCNN.USE_BN)
+            self.xyz_up_layer = pt_utils.SharedMLP(
+                [self.rcnn_input_channel] + cfg.RCNN.XYZ_UP_LAYER,
+                bn=cfg.RCNN.USE_BN, instance_norm=cfg.RCNN.USE_IN, group_norm=cfg.RCNN.USE_GN)
             c_out = cfg.RCNN.XYZ_UP_LAYER[-1]
-            self.merge_down_layer = pt_utils.SharedMLP([c_out * 2, c_out], bn=cfg.RCNN.USE_BN)
+            self.merge_down_layer = pt_utils.SharedMLP(
+                [c_out * 2, c_out],
+                bn=cfg.RCNN.USE_BN, instance_norm=cfg.RCNN.USE_IN, group_norm=cfg.RCNN.USE_GN
+            )
 
         for k in range(cfg.RCNN.SA_CONFIG.NPOINTS.__len__()):
             mlps = [channel_in] + cfg.RCNN.SA_CONFIG.MLPS[k]
@@ -36,7 +40,9 @@ class RCNNNet(nn.Module):
                     nsample=cfg.RCNN.SA_CONFIG.NSAMPLE[k],
                     mlp=mlps,
                     use_xyz=use_xyz,
-                    bn=cfg.RCNN.USE_BN
+                    bn=cfg.RCNN.USE_BN,
+                    instance_norm=cfg.RCNN.USE_IN,
+                    group_norm=cfg.RCNN.USE_GN
                 )
             )
             channel_in = mlps[-1]
@@ -46,7 +52,10 @@ class RCNNNet(nn.Module):
         cls_layers = []
         pre_channel = channel_in
         for k in range(0, cfg.RCNN.CLS_FC.__len__()):
-            cls_layers.append(pt_utils.Conv1d(pre_channel, cfg.RCNN.CLS_FC[k], bn=cfg.RCNN.USE_BN))
+            cls_layers.append(pt_utils.Conv1d(
+                pre_channel, cfg.RCNN.CLS_FC[k],
+                bn=cfg.RCNN.USE_BN, instance_norm=cfg.RCNN.USE_IN, group_norm=cfg.RCNN.USE_GN)
+            )
             pre_channel = cfg.RCNN.CLS_FC[k]
         cls_layers.append(pt_utils.Conv1d(pre_channel, cls_channel, activation=None))
         if cfg.RCNN.DP_RATIO >= 0:
@@ -73,7 +82,10 @@ class RCNNNet(nn.Module):
         reg_layers = []
         pre_channel = channel_in
         for k in range(0, cfg.RCNN.REG_FC.__len__()):
-            reg_layers.append(pt_utils.Conv1d(pre_channel, cfg.RCNN.REG_FC[k], bn=cfg.RCNN.USE_BN))
+            reg_layers.append(pt_utils.Conv1d(
+                pre_channel, cfg.RCNN.REG_FC[k],
+                bn=cfg.RCNN.USE_BN, instance_norm=cfg.RCNN.USE_IN, group_norm=cfg.RCNN.USE_GN)
+            )
             pre_channel = cfg.RCNN.REG_FC[k]
         reg_layers.append(pt_utils.Conv1d(pre_channel, reg_channel, activation=None))
         if cfg.RCNN.DP_RATIO >= 0:
@@ -119,6 +131,8 @@ class RCNNNet(nn.Module):
         """
         if cfg.RCNN.ROI_SAMPLE_JIT:
             if self.training:
+                # print('cfg.RCNN.ROI_SAMPLE_JIT')
+
                 with torch.no_grad():
                     target_dict = self.proposal_target_layer(input_data)
 
@@ -127,6 +141,7 @@ class RCNNNet(nn.Module):
             else:
                 rpn_xyz, rpn_features = input_data['rpn_xyz'], input_data['rpn_features']
                 batch_rois = input_data['roi_boxes3d']
+
                 if cfg.RCNN.USE_INTENSITY:
                     pts_extra_input_list = [input_data['rpn_intensity'].unsqueeze(dim=2),
                                             input_data['seg_mask'].unsqueeze(dim=2)]
@@ -136,6 +151,7 @@ class RCNNNet(nn.Module):
                 if cfg.RCNN.USE_DEPTH:
                     pts_depth = input_data['pts_depth'] / 70.0 - 0.5
                     pts_extra_input_list.append(pts_depth.unsqueeze(dim=2))
+
                 pts_extra_input = torch.cat(pts_extra_input_list, dim=2)
 
                 pts_feature = torch.cat((pts_extra_input, rpn_features), dim=2)
@@ -147,6 +163,7 @@ class RCNNNet(nn.Module):
                 batch_size = batch_rois.shape[0]
                 roi_center = batch_rois[:, :, 0:3]
                 pooled_features[:, :, :, 0:3] -= roi_center.unsqueeze(dim=2)
+
                 for k in range(batch_size):
                     pooled_features[k, :, :, 0:3] = kitti_utils.rotate_pc_along_y_torch(pooled_features[k, :, :, 0:3],
                                                                                         batch_rois[k, :, 6])
@@ -157,10 +174,17 @@ class RCNNNet(nn.Module):
             target_dict = {}
             target_dict['pts_input'] = input_data['pts_input']
             target_dict['roi_boxes3d'] = input_data['roi_boxes3d']
+
             if self.training:
                 target_dict['cls_label'] = input_data['cls_label']
                 target_dict['reg_valid_mask'] = input_data['reg_valid_mask']
                 target_dict['gt_of_rois'] = input_data['gt_boxes3d_ct']
+
+        # print('target_dict:')
+        # for key in target_dict:
+        #     print(key, target_dict[key].size())
+        # print()
+        # print()
 
         xyz, features = self._break_up_pc(pts_input)
 

@@ -32,8 +32,20 @@ class GTDatabaseGenerator(KittiDataset):
             )
         elif classes == 'car':
             self.classes = ('background', 'car')
+        elif classes == 'pedestrian':
+            self.classes = ('background', 'pedestrian')
+        elif classes == 'vehicles':
+            self.classes = ('background', 'car', 'bus', 'emergency_vehicle', 'other_vehicle', 'truck')
         elif classes == 'huge_vehicles':
             self.classes = ('background', 'bus', 'emergency_vehicle', 'other_vehicle', 'truck')
+        elif classes == 'bus':
+            self.classes = ('background', 'bus')
+        elif classes == 'other_vehicle':
+            self.classes = ('background', 'other_vehicle')
+        elif classes == 'truck':
+            self.classes = ('background', 'truck')
+        elif classes == 'emergency_vehicle':
+            self.classes = ('background', 'emergency_vehicle')
         else:
             assert False, "Invalid classes: %s" % classes
 
@@ -78,10 +90,12 @@ class GTDatabaseGenerator(KittiDataset):
                     = obj.pos, obj.h, obj.w, obj.l, obj.ry
 
             if gt_boxes3d.__len__() == 0:
-                print('No gt object')
+                # print('No gt object')
                 continue
 
-            boxes_pts_mask_list = roipool3d_utils.pts_in_boxes3d_cpu(torch.from_numpy(pts_rect), torch.from_numpy(gt_boxes3d))
+            boxes_pts_mask_list = roipool3d_utils.pts_in_boxes3d_cpu(
+                torch.from_numpy(pts_rect), torch.from_numpy(gt_boxes3d)
+            )
 
             for k in range(boxes_pts_mask_list.__len__()):
                 pt_mask_flag = (boxes_pts_mask_list[k].numpy() == 1)

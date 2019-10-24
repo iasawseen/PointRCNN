@@ -27,6 +27,12 @@ class PointRCNN(nn.Module):
         self.rpn.to_mixed_precision()
 
     def forward(self, input_data):
+        # print('input_data')
+        # for key in input_data:
+        #     print(key, input_data[key].size())
+        # print()
+        # print()
+
         if cfg.RPN.ENABLED:
             output = {}
             # rpn inference
@@ -35,6 +41,12 @@ class PointRCNN(nn.Module):
                     self.rpn.eval()
                 rpn_output = self.rpn(input_data)
                 output.update(rpn_output)
+
+            # print('rpn output:')
+            # for key in rpn_output:
+            #     print(key, rpn_output[key].size())
+            # print()
+            # print()
 
             # rcnn inference
             if cfg.RCNN.ENABLED:
@@ -62,7 +74,20 @@ class PointRCNN(nn.Module):
                 if self.training:
                     rcnn_input_info['gt_boxes3d'] = input_data['gt_boxes3d']
 
+                # print('rcnn input:')
+                # for key in rcnn_input_info:
+                #     print(key, rcnn_input_info[key].size())
+                # print()
+                # print()
+
                 rcnn_output = self.rcnn_net(rcnn_input_info)
+
+                # print('rcnn output:')
+                # for key in rcnn_output:
+                #     print(key, rcnn_output[key].size())
+                # print()
+                # print()
+
                 output.update(rcnn_output)
 
         elif cfg.RCNN.ENABLED:

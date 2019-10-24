@@ -20,7 +20,12 @@ class RPN(nn.Module):
         cls_layers = []
         pre_channel = cfg.RPN.FP_MLPS[0][-1]
         for k in range(0, cfg.RPN.CLS_FC.__len__()):
-            cls_layers.append(pt_utils.Conv1d(pre_channel, cfg.RPN.CLS_FC[k], bn=cfg.RPN.USE_BN))
+            cls_layers.append(
+                pt_utils.Conv1d(
+                    pre_channel, cfg.RPN.CLS_FC[k],
+                    bn=cfg.RPN.USE_BN, instance_norm=cfg.RPN.USE_IN, group_norm=cfg.RPN.USE_GN
+                )
+            )
             pre_channel = cfg.RPN.CLS_FC[k]
         cls_layers.append(pt_utils.Conv1d(pre_channel, 1, activation=None))
         if cfg.RPN.DP_RATIO >= 0:
@@ -38,7 +43,12 @@ class RPN(nn.Module):
         reg_layers = []
         pre_channel = cfg.RPN.FP_MLPS[0][-1]
         for k in range(0, cfg.RPN.REG_FC.__len__()):
-            reg_layers.append(pt_utils.Conv1d(pre_channel, cfg.RPN.REG_FC[k], bn=cfg.RPN.USE_BN))
+            reg_layers.append(
+                pt_utils.Conv1d(
+                    pre_channel, cfg.RPN.REG_FC[k],
+                    bn=cfg.RPN.USE_BN, instance_norm=cfg.RPN.USE_IN, group_norm=cfg.RPN.USE_GN
+                )
+            )
             pre_channel = cfg.RPN.REG_FC[k]
         reg_layers.append(pt_utils.Conv1d(pre_channel, reg_channel, activation=None))
         if cfg.RPN.DP_RATIO >= 0:

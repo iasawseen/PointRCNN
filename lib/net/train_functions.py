@@ -11,6 +11,13 @@ def model_joint_fn_decorator():
     MEAN_SIZE = torch.from_numpy(cfg.CLS_MEAN_SIZE[0]).cuda()
 
     def model_fn(model, data):
+
+        # print('data')
+        # for key in data:
+        #     print(key, data[key].size())
+        # print()
+        # print()
+
         if cfg.RPN.ENABLED:
             pts_rect, pts_features, pts_input = data['pts_rect'], data['pts_features'], data['pts_input']
             gt_boxes3d = data['gt_boxes3d']
@@ -34,9 +41,18 @@ def model_joint_fn_decorator():
 
         ret_dict = model(input_data)
 
+        # print('ret_dict')
+        # for key in ret_dict:
+        #     print(key, ret_dict[key].size())
+        # print()
+        # print()
+        #
+        # exit(0)
+
         tb_dict = {}
         disp_dict = {}
         loss = 0
+
         if cfg.RPN.ENABLED and not cfg.RPN.FIXED:
             rpn_cls, rpn_reg = ret_dict['rpn_cls'], ret_dict['rpn_reg']
             rpn_loss = get_rpn_loss(model, rpn_cls, rpn_reg, rpn_cls_label, rpn_reg_label, tb_dict)
@@ -160,14 +176,15 @@ def model_joint_fn_decorator():
             cls_valid_mask = (cls_label_flat >= 0).float()
             rcnn_loss_cls = (batch_loss_cls * cls_valid_mask).sum() / torch.clamp(cls_valid_mask.sum(), min=1.0)
 
-        elif cfg.TRAIN.LOSS_CLS == 'CrossEntropy':
+        elif cfg.RCNN.LOSS_CLS == 'CrossEntropy':
             rcnn_cls_reshape = rcnn_cls.view(rcnn_cls.shape[0], -1)
             cls_target = cls_label_flat.long()
             cls_valid_mask = (cls_label_flat >= 0).float()
 
             batch_loss_cls = cls_loss_func(rcnn_cls_reshape, cls_target)
             normalizer = torch.clamp(cls_valid_mask.sum(), min=1.0)
-            rcnn_loss_cls = (batch_loss_cls.mean(dim=1) * cls_valid_mask).sum() / normalizer
+            # rcnn_loss_cls = (batch_loss_cls.mean(dim=1) * cls_valid_mask).sum() / normalizer
+            rcnn_loss_cls = (batch_loss_cls * cls_valid_mask).sum() / normalizer
 
         else:
             raise NotImplementedError
@@ -182,7 +199,8 @@ def model_joint_fn_decorator():
 
             loss_loc, loss_angle, loss_size, reg_loss_dict = \
                 loss_utils.get_reg_loss(rcnn_reg.view(batch_size, -1)[fg_mask],
-                                        gt_boxes3d_ct.view(batch_size, 7)[fg_mask],
+                                        # gt_boxes3d_ct.view(batch_size, 7)[fg_mask],
+                                        gt_boxes3d_ct.view(batch_size, 8)[fg_mask],
                                         loc_scope=cfg.RCNN.LOC_SCOPE,
                                         loc_bin_size=cfg.RCNN.LOC_BIN_SIZE,
                                         num_head_bin=cfg.RCNN.NUM_HEAD_BIN,

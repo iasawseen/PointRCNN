@@ -30,7 +30,8 @@ class Pointnet2MSG(nn.Module):
                     nsamples=cfg.RPN.SA_CONFIG.NSAMPLE[k],
                     mlps=mlps,
                     use_xyz=use_xyz,
-                    bn=cfg.RPN.USE_BN
+                    bn=cfg.RPN.USE_BN,
+                    group_norm=cfg.RPN.USE_GN
                 )
             )
             skip_channel_list.append(channel_out)

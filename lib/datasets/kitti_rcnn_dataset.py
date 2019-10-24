@@ -31,11 +31,31 @@ class KittiRCNNDataset(KittiDataset):
         elif classes == 'car':
             self.classes = ('background', 'car')
             aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene_car')
+        elif classes == 'pedestrian':
+            self.classes = ('background', 'pedestrian')
+            aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene_pedestrian')
+        elif classes == 'vehicles':
+            self.classes = ('background', 'car', 'bus', 'emergency_vehicle', 'other_vehicle', 'truck')
+            aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene_vehicles')
         elif classes == 'huge_vehicles':
             self.classes = ('background', 'bus', 'emergency_vehicle', 'other_vehicle', 'truck')
             aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene_huge_vehicles')
+        elif classes == 'bus':
+            self.classes = ('background', 'bus')
+            aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene_bus')
+        elif classes == 'other_vehicle':
+            self.classes = ('background', 'other_vehicle')
+            aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene_other_vehicle')
+        elif classes == 'truck':
+            self.classes = ('background', 'truck')
+            aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene_truck')
+        elif classes == 'emergency_vehicle':
+            self.classes = ('background', 'emergency_vehicle')
+            aug_scene_root_dir = os.path.join(root_dir, 'KITTI', 'aug_scene_emergency_vehicle')
         else:
             assert False, "Invalid classes: %s" % classes
+
+        self.class_to_index = {klass: index for index, klass in enumerate(self.classes)}
 
         self.num_class = self.classes.__len__()
 
@@ -248,14 +268,30 @@ class KittiRCNNDataset(KittiDataset):
 
     def __getitem__(self, index):
         if cfg.RPN.ENABLED:
+            # print('get_rpn_sample')
+            # print()
+            # print()
+            # print()
             return self.get_rpn_sample(index)
         elif cfg.RCNN.ENABLED:
             if self.mode == 'TRAIN':
                 if cfg.RCNN.ROI_SAMPLE_JIT:
+                    # print('get_rcnn_sample_jit')
+                    # print()
+                    # print()
+                    # print()
                     return self.get_rcnn_sample_jit(index)
                 else:
+                    # print('get_rcnn_training_sample_batch')
+                    # print()
+                    # print()
+                    # print()
                     return self.get_rcnn_training_sample_batch(index)
             else:
+                # print('not get_proposal_from_file')
+                # print()
+                # print()
+                # print()
                 return self.get_proposal_from_file(index)
         else:
             raise NotImplementedError
@@ -285,7 +321,6 @@ class KittiRCNNDataset(KittiDataset):
 
         # pts_img, pts_rect_depth = calib.rect_to_img(pts_rect)
         # pts_valid_flag = self.get_valid_flag(pts_rect, pts_img, pts_rect_depth, img_shape)
-        #
         # pts_rect = pts_rect[pts_valid_flag][:, 0:3]
         # pts_intensity = pts_intensity[pts_valid_flag]
 
@@ -307,10 +342,6 @@ class KittiRCNNDataset(KittiDataset):
                 # pts_near_flag = pts_depth < 40.0
                 # far_idxs_choice = np.where(pts_near_flag == 0)[0]
                 # near_idxs = np.where(pts_near_flag == 1)[0]
-                #
-                # print('far_idxs_choice:', far_idxs_choice.shape)
-                # print('near_idxs:', near_idxs.shape)
-                # print('self.npoints - len(far_idxs_choice):', self.npoints - len(far_idxs_choice))
 
                 # near_idxs_choice = np.random.choice(near_idxs, self.npoints - len(far_idxs_choice), replace=False)
                 #
@@ -318,9 +349,6 @@ class KittiRCNNDataset(KittiDataset):
                 #     if len(far_idxs_choice) > 0 else near_idxs_choice
 
                 choice = np.random.choice(np.arange(0, len(pts_rect), dtype=np.int32), self.npoints, replace=False)
-
-                # print('choice:', choice.shape)
-
                 np.random.shuffle(choice)
             else:
                 choice = np.arange(0, len(pts_rect), dtype=np.int32)
@@ -358,7 +386,7 @@ class KittiRCNNDataset(KittiDataset):
         if cfg.GT_AUG_ENABLED and self.mode == 'TRAIN' and gt_aug_flag:
             gt_obj_list.extend(extra_gt_obj_list)
 
-        gt_boxes3d = kitti_utils.objs_to_boxes3d(gt_obj_list)
+        gt_boxes3d = kitti_utils.objs_to_boxes3d(self, gt_obj_list)
 
         gt_alpha = np.zeros((gt_obj_list.__len__()), dtype=np.float32)
         for k, obj in enumerate(gt_obj_list):
@@ -379,11 +407,15 @@ class KittiRCNNDataset(KittiDataset):
         else:
             pts_input = aug_pts_rect
 
+        gt_boxes_class = np.array([self.class_to_index[gt_obj.cls_type] for gt_obj in gt_obj_list], dtype=np.long)
+
         if cfg.RPN.FIXED:
             sample_info['pts_input'] = pts_input
             sample_info['pts_rect'] = aug_pts_rect
             sample_info['pts_features'] = ret_pts_features
             sample_info['gt_boxes3d'] = aug_gt_boxes3d
+            # sample_info['gt_boxes_class'] = gt_boxes_class
+
             return sample_info
 
         # generate training labels
@@ -394,6 +426,8 @@ class KittiRCNNDataset(KittiDataset):
         sample_info['rpn_cls_label'] = rpn_cls_label
         sample_info['rpn_reg_label'] = rpn_reg_label
         sample_info['gt_boxes3d'] = aug_gt_boxes3d
+        # sample_info['gt_boxes_class'] = gt_boxes_class
+
         return sample_info
 
     @staticmethod
@@ -568,10 +602,14 @@ class KittiRCNNDataset(KittiDataset):
                 aug_gt_boxes3d = kitti_utils.rotate_pc_along_y(aug_gt_boxes3d, rot_angle=angle)
 
                 # calculate the ry after rotation
-                x, z = aug_gt_boxes3d[:, 0], aug_gt_boxes3d[:, 2]
-                beta = np.arctan2(z, x)
-                new_ry = np.sign(beta) * np.pi / 2 + gt_alpha - beta
-                aug_gt_boxes3d[:, 6] = new_ry  # TODO: not in [-np.pi / 2, np.pi / 2]
+                # x, z = aug_gt_boxes3d[:, 0], aug_gt_boxes3d[:, 2]
+                # beta = np.arctan2(z, x)
+                # new_ry = np.sign(beta) * np.pi - beta
+
+                # aug_gt_boxes3d[:, 6] = new_ry  # TODO: not in [-np.pi / 2, np.pi / 2]
+                # aug_gt_boxes3d[:, 6] += angle  # TODO: not in [-np.pi / 2, np.pi / 2]
+                aug_gt_boxes3d[:, 6] -= angle  # TODO: not in [-np.pi / 2, np.pi / 2]
+
             elif stage == 2:
                 # for debug stage-2, this implementation has little float precision difference with the above one
                 assert aug_gt_boxes3d.shape[0] == 2
@@ -625,6 +663,7 @@ class KittiRCNNDataset(KittiDataset):
         aug_pts = cur_pts.copy()
         aug_gt_box3d = gt_box3d.copy().astype(np.float32)
         aug_roi_box3d = roi_box3d.copy()
+
         if cfg.AUG_DATA and self.mode == 'TRAIN':
             # calculate alpha by ry
             temp_boxes3d = np.concatenate([aug_roi_box3d.reshape(1, 7), aug_gt_box3d.reshape(1, 7)], axis=0)
@@ -951,12 +990,12 @@ class KittiRCNNDataset(KittiDataset):
             fg_inds = fg_inds[rand_num[:fg_rois_per_this_image]]
 
             # sampling bg
-            bg_rois_per_this_image = cfg.RCNN.ROI_PER_IMAGE  - fg_rois_per_this_image
+            bg_rois_per_this_image = cfg.RCNN.ROI_PER_IMAGE - fg_rois_per_this_image
             bg_inds = self.sample_bg_inds(hard_bg_inds, easy_bg_inds, bg_rois_per_this_image)
 
         elif fg_num_rois > 0 and bg_num_rois == 0:
             # sampling fg
-            rand_num = np.floor(np.random.rand(cfg.RCNN.ROI_PER_IMAGE ) * fg_num_rois)
+            rand_num = np.floor(np.random.rand(cfg.RCNN.ROI_PER_IMAGE) * fg_num_rois)
             rand_num = torch.from_numpy(rand_num).type_as(gt_boxes3d).long()
             fg_inds = fg_inds[rand_num]
             fg_rois_per_this_image = cfg.RCNN.ROI_PER_IMAGE
@@ -1154,7 +1193,8 @@ class KittiRCNNDataset(KittiDataset):
                 max_gt = 0
                 for k in range(batch_size):
                     max_gt = max(max_gt, batch[k][key].__len__())
-                batch_gt_boxes3d = np.zeros((batch_size, max_gt, 7), dtype=np.float32)
+                # batch_gt_boxes3d = np.zeros((batch_size, max_gt, 7), dtype=np.float32)
+                batch_gt_boxes3d = np.zeros((batch_size, max_gt, 8), dtype=np.float32)
                 for i in range(batch_size):
                     batch_gt_boxes3d[i, :batch[i][key].__len__(), :] = batch[i][key]
                 ans_dict[key] = batch_gt_boxes3d

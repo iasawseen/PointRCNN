@@ -177,11 +177,12 @@ def in_hull(p, hull):
     return flag
 
 
-def objs_to_boxes3d(obj_list):
-    boxes3d = np.zeros((obj_list.__len__(), 7), dtype=np.float32)
+def objs_to_boxes3d(dataset, obj_list):
+    # boxes3d = np.zeros((obj_list.__len__(), 7), dtype=np.float32)
+    boxes3d = np.zeros((obj_list.__len__(), 8), dtype=np.float32)
     for k, obj in enumerate(obj_list):
-        boxes3d[k, 0:3], boxes3d[k, 3], boxes3d[k, 4], boxes3d[k, 5], boxes3d[k, 6] \
-            = obj.pos, obj.h, obj.w, obj.l, obj.ry
+        boxes3d[k, 0:3], boxes3d[k, 3], boxes3d[k, 4], boxes3d[k, 5], boxes3d[k, 6], boxes3d[k, 7] \
+            = obj.pos, obj.h, obj.w, obj.l, obj.ry, dataset.class_to_index[obj.cls_type]
     return boxes3d
 
 

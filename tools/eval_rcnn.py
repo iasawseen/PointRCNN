@@ -53,6 +53,7 @@ parser.add_argument("--rcnn_eval_feature_dir", type=str, default=None,
                     help='specify the saved features for rcnn evaluation when using rcnn_offline mode')
 parser.add_argument('--set', dest='set_cfgs', default=None, nargs=argparse.REMAINDER,
                     help='set extra config keys if needed')
+
 args = parser.parse_args()
 
 
@@ -127,7 +128,9 @@ def eval_one_epoch_rpn(model, dataloader, epoch_id, result_dir, logger):
     logger.info('---- EPOCH %s RPN EVALUATION ----' % epoch_id)
     model.eval()
 
-    thresh_list = [0.1, 0.3, 0.5, 0.7, 0.9]
+    # thresh_list = [0.1, 0.3, 0.5, 0.7, 0.9]
+    thresh_list = [0.5, 0.6, 0.7, 0.8, 0.9]
+
     total_recalled_bbox_list, total_gt_bbox = [0] * 5, 0
     dataset = dataloader.dataset
     cnt = max_num = rpn_iou_avg = 0
@@ -186,6 +189,7 @@ def eval_one_epoch_rpn(model, dataloader, epoch_id, result_dir, logger):
                 cur_gt_boxes3d = cur_gt_boxes3d[:k + 1]
 
                 recalled_num = 0
+
                 if cur_gt_boxes3d.shape[0] > 0:
                     iou3d = iou3d_utils.boxes_iou3d_gpu(cur_boxes3d, cur_gt_boxes3d[:, 0:7])
                     gt_max_iou, _ = iou3d.max(dim=0)
@@ -273,9 +277,9 @@ def eval_one_epoch_rcnn(model, dataloader, epoch_id, result_dir, logger):
     logger.info('---- EPOCH %s RCNN EVALUATION ----' % epoch_id)
     model.eval()
 
-    thresh_list = [0.1, 0.3, 0.5, 0.7, 0.9]
-    total_recalled_bbox_list, total_gt_bbox = [0] * 5, 0
-    total_roi_recalled_bbox_list = [0] * 5
+    thresh_list = [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
+    total_recalled_bbox_list, total_gt_bbox = [0] * len(thresh_list), 0
+    total_roi_recalled_bbox_list = [0] * len(thresh_list)
     dataset = dataloader.dataset
     cnt = final_total = total_cls_acc = total_cls_acc_refined = 0
 
@@ -291,6 +295,7 @@ def eval_one_epoch_rcnn(model, dataloader, epoch_id, result_dir, logger):
 
         roi_boxes3d = input_data['roi_boxes3d']
         roi_scores = input_data['roi_scores']
+
         if cfg.RCNN.ROI_SAMPLE_JIT:
             for key, val in input_data.items():
                 if key in ['gt_iou', 'gt_boxes3d']:
@@ -345,6 +350,7 @@ def eval_one_epoch_rcnn(model, dataloader, epoch_id, result_dir, logger):
 
                 for idx, thresh in enumerate(thresh_list):
                     total_recalled_bbox_list[idx] += (gt_max_iou > thresh).sum().item()
+
                 recalled_num = (gt_max_iou > 0.7).sum().item()
                 total_gt_bbox += gt_num
 
@@ -373,6 +379,7 @@ def eval_one_epoch_rcnn(model, dataloader, epoch_id, result_dir, logger):
         progress_bar.update()
 
         image_shape = dataset.get_image_shape(sample_id)
+
         if args.save_result:
             # save roi and refine results
             roi_boxes3d_np = roi_boxes3d.cpu().numpy()
@@ -479,17 +486,32 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
     logger.info('==> Output file: %s' % result_dir)
     model.eval()
 
-    thresh_list = [0.1, 0.3, 0.5, 0.7, 0.9]
-    total_recalled_bbox_list, total_gt_bbox = [0] * 5, 0
-    total_roi_recalled_bbox_list = [0] * 5
+    thresh_list = [0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9, 0.95]
+    total_recalled_bbox_list, total_gt_bbox = [0] * len(thresh_list), 0
+    total_roi_recalled_bbox_list = [0] * len(thresh_list)
     dataset = dataloader.dataset
+
+    total_recalled_bbox_dict = dict()
+    total_gt_bbox_dict = dict()
+
+    for klass in dataset.classes[1:]:
+        total_recalled_bbox_dict[klass] = [0] * len(thresh_list)
+        total_gt_bbox_dict[klass] = 0
+
     cnt = final_total = total_cls_acc = total_cls_acc_refined = total_rpn_iou = 0
 
     progress_bar = tqdm.tqdm(total=len(dataloader), leave=True, desc='eval')
     for data in dataloader:
         cnt += 1
+
+        if cnt > 1024:
+            break
+
         sample_id, pts_rect, pts_features, pts_input = \
             data['sample_id'], data['pts_rect'], data['pts_features'], data['pts_input']
+
+        # print('sample_id:', sample_id)
+
         batch_size = len(sample_id)
         inputs = torch.from_numpy(pts_input).cuda(non_blocking=True).float()
         input_data = {'pts_input': inputs}
@@ -506,6 +528,7 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
 
         # bounding box regression
         anchor_size = MEAN_SIZE
+
         if cfg.RCNN.SIZE_RES_ON_ROI:
             assert False
 
@@ -525,13 +548,14 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
             norm_scores = torch.sigmoid(raw_scores)
             pred_classes = (norm_scores > cfg.RCNN.SCORE_THRESH).long()
         else:
-            pred_classes = torch.argmax(rcnn_cls, dim=1).view(-1)
-            cls_norm_scores = F.softmax(rcnn_cls, dim=1)
-            raw_scores = rcnn_cls[:, pred_classes]
-            norm_scores = cls_norm_scores[:, pred_classes]
+            pred_classes = torch.argmax(rcnn_cls, dim=2)
+            cls_norm_scores = F.softmax(rcnn_cls, dim=2)
+            raw_scores, _ = torch.max(rcnn_cls, dim=2)
+            norm_scores, _ = torch.max(cls_norm_scores, dim=2)
 
         # evaluation
         recalled_num = gt_num = rpn_iou = 0
+
         if not args.test:
             if not cfg.RPN.FIXED:
                 rpn_cls_label, rpn_reg_label = data['rpn_cls_label'], data['rpn_reg_label']
@@ -542,6 +566,9 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
             for k in range(batch_size):
                 # calculate recall
                 cur_gt_boxes3d = gt_boxes3d[k]
+                cur_gt_boxes_class = cur_gt_boxes3d[:, -1]
+                cur_pred_classes = pred_classes[k]
+
                 tmp_idx = cur_gt_boxes3d.__len__() - 1
 
                 while tmp_idx >= 0 and cur_gt_boxes3d[tmp_idx].sum() == 0:
@@ -551,14 +578,29 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
                     cur_gt_boxes3d = cur_gt_boxes3d[:tmp_idx + 1]
 
                     cur_gt_boxes3d = torch.from_numpy(cur_gt_boxes3d).cuda(non_blocking=True).float()
+                    cur_gt_boxes_class = torch.from_numpy(cur_gt_boxes_class).cuda(non_blocking=True).long()
+
                     iou3d = iou3d_utils.boxes_iou3d_gpu(pred_boxes3d[k], cur_gt_boxes3d)
-                    gt_max_iou, _ = iou3d.max(dim=0)
-                    refined_iou, _ = iou3d.max(dim=1)
+                    gt_max_iou, gt_argmax = iou3d.max(dim=0)
+                    refined_iou, refined_iou_argmax = iou3d.max(dim=1)
 
                     for idx, thresh in enumerate(thresh_list):
-                        total_recalled_bbox_list[idx] += (gt_max_iou > thresh).sum().item()
+                        total_recalled_bbox_list[idx] += (
+                            (gt_max_iou > thresh) & (cur_pred_classes[gt_argmax] == cur_gt_boxes_class)
+                        ).sum().item()
+
+                        for klass_index, klass in enumerate(dataset.classes[1:]):
+                            klass_index += 1
+                            total_recalled_bbox_dict[klass][idx] += (
+                                 (gt_max_iou > thresh) & (cur_pred_classes[gt_argmax] == cur_gt_boxes_class) &
+                                 (cur_gt_boxes_class == klass_index)
+                            ).sum().item()
+
+                    for klass_index, klass in enumerate(dataset.classes[1:]):
+                        klass_index += 1
+                        total_gt_bbox_dict[klass] += (cur_gt_boxes_class == klass_index).sum().item()
+
                     recalled_num += (gt_max_iou > 0.7).sum().item()
-                    # recalled_num += (gt_max_iou > 0.5).sum().item()
                     gt_num += cur_gt_boxes3d.shape[0]
                     total_gt_bbox += cur_gt_boxes3d.shape[0]
 
@@ -654,30 +696,85 @@ def eval_one_epoch_joint(model, dataloader, epoch_id, result_dir, logger):
     avg_cls_acc = (total_cls_acc / max(cnt, 1.0))
     avg_cls_acc_refined = (total_cls_acc_refined / max(cnt, 1.0))
     avg_det_num = (final_total / max(len(dataset), 1.0))
+
     logger.info('final average detections: %.3f' % avg_det_num)
     logger.info('final average rpn_iou refined: %.3f' % avg_rpn_iou)
     logger.info('final average cls acc: %.3f' % avg_cls_acc)
     logger.info('final average cls acc refined: %.3f' % avg_cls_acc_refined)
+
     ret_dict['rpn_iou'] = avg_rpn_iou
     ret_dict['rcnn_cls_acc'] = avg_cls_acc
     ret_dict['rcnn_cls_acc_refined'] = avg_cls_acc_refined
     ret_dict['rcnn_avg_num'] = avg_det_num
 
+    print()
+    print()
+
+    for klass in dataset.classes[1:]:
+        for index in range(len(thresh_list)):
+            total_recalled_bbox_dict[klass][index] = \
+                max(total_recalled_bbox_dict[klass][index], 0) / max(total_gt_bbox_dict[klass], 1)
+
+    print('{:17}'.format('threshold'), ' '.join(['{:.3f}'.format(threshold) for threshold in thresh_list]))
+    print()
+
+    for klass in dataset.classes[1:]:
+        print('{:17}'.format(klass), ' '.join(['{:.3f}'.format(recall) for recall in total_recalled_bbox_dict[klass]]))
+    print()
+
+    for klass in dataset.classes[1:]:
+        print('{:17}'.format(klass), '{:6d}'.format(total_gt_bbox_dict[klass]))
+    print()
+
+    threshold_recalls = list()
+
+    for index, threshold in enumerate(thresh_list):
+        average_recall = 0
+        for klass in dataset.classes[1:]:
+            average_recall += total_recalled_bbox_dict[klass][index]
+        average_recall /= len(dataset.classes[1:])
+        threshold_recalls.append(average_recall)
+
+    print('recalls:', ' '.join(['{:.3f}'.format(recall) for recall in threshold_recalls]))
+    print('mAR: {:.4f}'.format(sum(threshold_recalls) / len(threshold_recalls)))
+    print()
+    print()
+
     for idx, thresh in enumerate(thresh_list):
         cur_roi_recall = total_roi_recalled_bbox_list[idx] / max(total_gt_bbox, 1.0)
-        logger.info('total roi bbox recall(thresh=%.3f): %d / %d = %f' % (thresh, total_roi_recalled_bbox_list[idx],
-                                                                          total_gt_bbox, cur_roi_recall))
+
+        msg = 'total roi bbox recall(thresh=%.3f): %d / %d = %f' % (
+            thresh, total_roi_recalled_bbox_list[idx], total_gt_bbox, cur_roi_recall
+        )
+        logger.info(msg)
+        print(msg)
+
         ret_dict['rpn_recall(thresh=%.2f)' % thresh] = cur_roi_recall
+
+    print('mean total roi bbox recall: {:.4f}'.format(
+        sum(total_roi_recalled_bbox_list) / (total_gt_bbox * len(total_roi_recalled_bbox_list)))
+    )
+    print('\n')
 
     for idx, thresh in enumerate(thresh_list):
         cur_recall = total_recalled_bbox_list[idx] / max(total_gt_bbox, 1.0)
-        logger.info('total bbox recall(thresh=%.3f): %d / %d = %f' % (thresh, total_recalled_bbox_list[idx],
-                                                                      total_gt_bbox, cur_recall))
+        msg = 'total bbox recall(thresh=%.3f): %d / %d = %f' % (
+            thresh, total_recalled_bbox_list[idx], total_gt_bbox, cur_recall
+        )
+        logger.info(msg)
+        print(msg)
         ret_dict['rcnn_recall(thresh=%.2f)' % thresh] = cur_recall
+
+    print('mean total bbox recall: {:.4f}'.format(
+        sum(total_recalled_bbox_list) / (total_gt_bbox * len(total_recalled_bbox_list)))
+    )
+    print('\n')
+
+    exit(0)
 
     if cfg.TEST.SPLIT != 'test':
         logger.info('Averate Precision:')
-        name_to_class = {'Car': 0, 'Pedestrian': 1, 'Cyclist': 2}
+        name_to_class = {'Car': 0, 'Pedestrian': 1, 'Cyclist': 2, 'vehicles': 3}
         ap_result_str, ap_dict = kitti_evaluate(dataset.label_dir, final_output_dir, label_split_file=split_file,
                                                 current_class=name_to_class[cfg.CLASSES])
         logger.info(ap_result_str)

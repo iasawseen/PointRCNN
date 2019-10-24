@@ -138,6 +138,7 @@ class Trainer(object):
             self.optimizer.backward(loss)
         else:
             loss.backward()
+
         clip_grad_norm_(self.model.parameters(), self.grad_norm_clip)
         self.optimizer.step()
 
@@ -233,7 +234,7 @@ class Trainer(object):
                     )
 
                 # eval one epoch
-                if (epoch % eval_frequency) == 0:
+                if self.cfg.TRAIN.EVAL and (epoch % eval_frequency) == 0:
                     pbar.close()
                     if test_loader is not None:
                         with torch.set_grad_enabled(False):
